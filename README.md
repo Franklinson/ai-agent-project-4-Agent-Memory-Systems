@@ -1,10 +1,10 @@
 # AI Agent Memory Systems
 
-A comprehensive collection of memory management systems and tools for AI agents, including conversation history management, token counting, budgeting, and context window management with prioritization.
+A comprehensive collection of memory management systems and tools for AI agents, including conversation history management, token counting, budgeting, context window management with prioritization, and abstract memory storage interfaces.
 
 ## Project Overview
 
-This project implements various memory architectures and management systems for AI agents, focusing on practical implementations of conversation management, token budgeting, context prioritization, and memory optimization strategies.
+This project implements various memory architectures and management systems for AI agents, focusing on practical implementations of conversation management, token budgeting, context prioritization, memory storage abstraction, and memory optimization strategies.
 
 ## Structure
 
@@ -40,6 +40,35 @@ This project implements various memory architectures and management systems for 
   - Importance scoring
   - Graceful degradation
   - Integration with conversation and token managers
+
+### Day 48: Memory Storage Interface
+- **memory_storage.py**: Abstract storage interface with in-memory backend
+  - Abstract base class (MemoryStorageInterface) for pluggable backends
+  - Save memory with metadata and auto-generated IDs
+  - Retrieve memory by ID
+  - Update content and metadata with timestamp tracking
+  - Delete memory with confirmation
+  - List and filter memories by metadata
+  - Custom error hierarchy (MemoryStorageError, MemoryNotFoundError, MemoryConflictError)
+
+- **sql_store.py**: SQL storage backend using SQLAlchemy + SQLite
+  - Implements MemoryStorageInterface for full compatibility
+  - Connection management with configurable database URL
+  - Automatic table creation on initialization
+  - SQLite WAL mode for better concurrent access
+  - Persistent storage across application restarts
+  - Duplicate ID conflict detection (MemoryConflictError)
+  - Flexible query method (by content substring, ID, or metadata)
+  - Transaction management with rollback on errors
+
+- **persistence_manager.py**: Coordinates storage operations with durability guarantees
+  - Works with any MemoryStorageInterface backend
+  - Retry logic with configurable attempts and exponential backoff
+  - Write confirmation (read-after-write verification)
+  - LRU cache for fast repeated retrievals
+  - Bulk save with graceful degradation (partial failure tolerance)
+  - Operation stats tracking (saves, retrievals, updates, deletes, retries, failures)
+  - Structured logging (operations, errors, performance timings)
 
 ## Installation
 
@@ -110,6 +139,80 @@ context = context_manager.build_context()
 messages = context_manager.build_messages()
 ```
 
+### Memory Storage (In-Memory)
+
+```python
+from day_48.memory_storage import InMemoryStorage
+
+storage = InMemoryStorage()
+
+# Save
+mem = storage.save("important fact", metadata={"type": "note"})
+
+# Retrieve
+mem = storage.retrieve(mem.id)
+
+# Update
+mem = storage.update(mem.id, content="updated fact", metadata={"priority": "high"})
+
+# List with filter
+notes = storage.list_memories(filter_metadata={"type": "note"})
+
+# Delete
+storage.delete(mem.id)
+```
+
+### SQL Storage (Persistent)
+
+```python
+from day_48.sql_store import SQLStorage
+
+# SQLite (default) — data persists to file
+storage = SQLStorage(db_url="sqlite:///memories.db")
+
+# Or in-memory SQLite for testing
+storage = SQLStorage(db_url="sqlite:///:memory:")
+
+# Same CRUD interface as InMemoryStorage
+mem = storage.save("important fact", metadata={"type": "note"})
+mem = storage.retrieve(mem.id)
+mem = storage.update(mem.id, content="updated", metadata={"priority": "high"})
+storage.delete(mem.id)
+
+# SQL-specific: flexible query method
+results = storage.query(content="important")          # substring search
+results = storage.query(type="note")                   # metadata filter
+results = storage.query(content="fact", type="note")   # combined
+
+storage.close()
+```
+
+### Persistence Manager
+
+```python
+from day_48.persistence_manager import PersistenceManager
+from day_48.sql_store import SQLStorage
+
+# Use with any storage backend
+storage = SQLStorage(db_url="sqlite:///memories.db")
+pm = PersistenceManager(storage=storage, max_retries=3)
+
+# CRUD with retry + write confirmation
+mem = pm.save("important fact", metadata={"type": "note"})
+mem = pm.retrieve(mem.id)   # cache-aware
+mem = pm.update(mem.id, content="updated")
+pm.delete(mem.id)
+
+# Bulk save (tolerates partial failures)
+results = pm.bulk_save([
+    {"content": "fact 1", "metadata": {"type": "note"}},
+    {"content": "fact 2", "memory_id": "custom-id"},
+])
+
+# Operation stats
+print(pm.stats)  # {saves: 2, retrievals: 1, ...}
+```
+
 ## Features
 
 ### Conversation Management
@@ -135,20 +238,50 @@ messages = context_manager.build_messages()
 - ✅ Dynamic selection
 - ✅ Integration with conversation and token managers
 
+### Memory Storage
+- ✅ Abstract storage interface (pluggable backends)
+- ✅ CRUD operations (save, retrieve, update, delete)
+- ✅ Metadata filtering
+- ✅ Timestamp tracking
+- ✅ Custom error hierarchy
+- ✅ In-memory backend implementation
+
+### SQL Storage Backend
+- ✅ SQLAlchemy + SQLite persistent storage
+- ✅ Configurable database URL
+- ✅ Automatic table creation
+- ✅ Duplicate ID conflict detection
+- ✅ Flexible query method (content, ID, metadata)
+- ✅ Transaction management with rollback
+- ✅ Connection management and cleanup
+- ✅ Data persistence across restarts
+
+### Persistence Manager
+- ✅ Backend-agnostic (works with any MemoryStorageInterface)
+- ✅ Retry logic with exponential backoff
+- ✅ Write confirmation (read-after-write)
+- ✅ LRU cache with configurable size
+- ✅ Bulk save with graceful degradation
+- ✅ Operation stats tracking
+- ✅ Structured logging (operations, errors, performance)
+
 ## Running Tests
 
 ```bash
 # Activate virtual environment
 source venv/bin/activate
 
-# Run all tests
+# Run Day 47 tests
 cd day_47
 python -m pytest test_conversation_manager.py -v
 python -m pytest test_token_counter.py -v
 python -m pytest test_context_manager.py -v
 
-# Run specific test file
-python -m pytest test_context_manager.py::TestContextManager -v
+# Run Day 48 tests
+cd ../day_48
+python -m pytest test_memory_storage.py -v
+python -m pytest test_sql_store.py -v
+python -m pytest test_persistence_manager.py -v
 ```
 
 ## Running Examples
@@ -170,6 +303,7 @@ python examples_context_manager.py
 6. **Priority-Based Context**: Ensure critical information is always included
 7. **Overflow Handling**: Gracefully handle context that exceeds model limits
 8. **Multi-Component Systems**: Coordinate system prompts, history, tools, and context
+9. **Pluggable Storage**: Swap storage backends without changing application code
 
 ## Best Practices
 
@@ -187,6 +321,7 @@ python examples_context_manager.py
 
 - Python 3.8+
 - tiktoken: Token counting for OpenAI models
+- SQLAlchemy: SQL database toolkit
 - pytest: Testing framework
 
 ## Project Structure
@@ -197,7 +332,7 @@ ai-agent-project-4 Agent Memory Systems/
 │   ├── memory_architecture.md
 │   ├── memory_types_comparison.md
 │   └── use_cases_analysis.md
-├── day_47/                          # Implementations
+├── day_47/                          # Conversation, Token & Context
 │   ├── conversation_manager.py      # Conversation history management
 │   ├── token_counter.py             # Token counting & budgeting
 │   ├── context_manager.py           # Context window management
@@ -207,6 +342,13 @@ ai-agent-project-4 Agent Memory Systems/
 │   ├── examples_token_counter.py    # Usage examples
 │   ├── examples_context_manager.py  # Usage examples
 │   └── README.md                    # Detailed documentation
+├── day_48/                          # Memory Storage Interface
+│   ├── memory_storage.py            # Abstract interface + in-memory backend
+│   ├── sql_store.py                 # SQL backend (SQLAlchemy + SQLite)
+│   ├── persistence_manager.py       # Persistence coordination layer
+│   ├── test_memory_storage.py       # In-memory storage tests
+│   ├── test_sql_store.py            # SQL storage tests
+│   └── test_persistence_manager.py  # Persistence manager tests
 ├── venv/                            # Virtual environment
 ├── requirements.txt                 # Python dependencies
 └── README.md                        # This file
@@ -227,7 +369,7 @@ This project is for educational and research purposes.
 ## Future Enhancements
 
 - [ ] Vector-based memory retrieval
-- [ ] Persistent storage backends
+- [x] Persistent storage backends (SQLAlchemy + SQLite)
 - [ ] Memory consolidation strategies
 - [ ] Multi-agent memory sharing
 - [ ] Advanced context compression
