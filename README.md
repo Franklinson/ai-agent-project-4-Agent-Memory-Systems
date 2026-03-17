@@ -41,6 +41,36 @@ This project implements various memory architectures and management systems for 
   - Graceful degradation
   - Integration with conversation and token managers
 
+### Day 49: Episodic Event Store, Conversation Memory & Experience Tracker
+- **event_store.py**: Event storage with temporal ordering and relationships
+  - Event types: Action, Observation, Decision, Communication, Error, Custom
+  - Event structure with timestamp, participants, context, data
+  - Temporal ordering via binary-search insertion
+  - Bidirectional event relationships
+  - Retrieval by time range, event type, participant, or relationship
+  - Timeline reconstruction and limiting
+  - Event sequence sorting
+  - Temporal pattern detection (interval analysis)
+  - Delete with relationship cleanup
+
+- **conversation_memory.py**: Multi-conversation memory with context tracking
+  - Conversation lifecycle (create, get, delete)
+  - Message sequences with ordering and metadata
+  - Context maintenance across turns (merge-based updates)
+  - Topic tracking (per-message and manual)
+  - Retrieval by user, time range, topic, or content search
+  - Multi-turn handling: turn pairs, message references, context window building
+
+- **experience_tracker.py**: Experience tracking for agent learning
+  - Experience logging with action, outcome, context, feedback, score, tags
+  - Outcome types: Success, Failure, Partial, Unknown
+  - Retrieval by action, outcome, tag, time range
+  - Pattern recognition: success rate, average score, outcome distribution
+  - Common tag analysis and score trend tracking
+  - Lesson extraction with recommendations
+  - Action comparison across multiple strategies
+  - Improvement detection via sliding window score analysis
+
 ### Day 48: Memory Storage Interface
 - **memory_storage.py**: Abstract storage interface with in-memory backend
   - Abstract base class (MemoryStorageInterface) for pluggable backends
@@ -137,6 +167,83 @@ context_manager.add_component("context", "Important info", Priority.HIGH)
 # Build context with automatic overflow handling
 context = context_manager.build_context()
 messages = context_manager.build_messages()
+```
+
+### Episodic Event Store
+
+```python
+from day_49.event_store import EventStore, EventType
+from datetime import datetime, timedelta
+
+store = EventStore()
+
+# Store events
+e1 = store.store(EventType.ACTION, data={"action": "login"}, participants=["alice"])
+e2 = store.store(EventType.OBSERVATION, data={"saw": "dashboard"},
+                 participants=["alice"], related_event_ids={e1.id})
+
+# Retrieve
+store.by_type(EventType.ACTION)           # all actions
+store.by_participant("alice")             # alice's events
+store.get_related(e1.id)                  # related events
+
+# Temporal queries
+store.timeline(limit=10)                  # last 10 events
+store.event_sequence([e2.id, e1.id])      # sorted by time
+store.temporal_pattern(EventType.ACTION)  # intervals between actions
+```
+
+### Experience Tracker
+
+```python
+from day_49.experience_tracker import ExperienceTracker, Outcome
+
+tracker = ExperienceTracker()
+
+# Log experiences
+tracker.log("search", Outcome.SUCCESS, score=0.9, tags=["web"])
+tracker.log("search", Outcome.FAILURE, score=0.2, feedback="timeout")
+tracker.log("search", Outcome.SUCCESS, score=0.8, tags=["web", "api"])
+
+# Pattern recognition
+tracker.success_rate("search")            # 0.666...
+tracker.average_score("search")           # 0.633...
+tracker.outcome_distribution("search")    # {"success": 2, "failure": 1}
+tracker.score_trend("search")             # [0.9, 0.2, 0.8]
+
+# Learning
+lesson = tracker.extract_lesson("search") # Lesson with recommendation
+tracker.is_improving("search", window=3)  # True/False/None
+tracker.compare_actions(["search", "summarize"])  # sorted by success rate
+```
+
+### Conversation Memory
+
+```python
+from day_49.conversation_memory import ConversationMemory
+
+mem = ConversationMemory()
+
+# Create conversation and add messages
+conv = mem.create_conversation("alice", context={"lang": "en"})
+m1 = mem.add_message(conv.id, "user", "Hello!", topics=["greeting"])
+m2 = mem.add_message(conv.id, "assistant", "Hi there!")
+mem.add_message(conv.id, "user", "Back to that", references=[m1.id])
+
+# Context maintenance
+mem.update_context(conv.id, {"mood": "happy"})
+mem.add_topics(conv.id, ["python"])
+
+# Retrieval
+mem.by_user("alice")                      # all alice's conversations
+mem.by_topic("greeting")                  # conversations about greetings
+mem.search_content("hello")               # search message content
+mem.by_time_range(start, end)             # by time window
+
+# Multi-turn helpers
+mem.get_turn_pairs(conv.id)               # user/assistant pairs
+mem.get_referenced_messages(conv.id, m.id) # follow references
+mem.build_context_window(conv.id, last_n=5) # formatted context
 ```
 
 ### Memory Storage (In-Memory)
@@ -238,6 +345,36 @@ print(pm.stats)  # {saves: 2, retrievals: 1, ...}
 - ✅ Dynamic selection
 - ✅ Integration with conversation and token managers
 
+### Episodic Event Store
+- ✅ Multiple event types (Action, Observation, Decision, Communication, Error, Custom)
+- ✅ Temporal ordering maintained on insert
+- ✅ Retrieval by time range, type, participant
+- ✅ Bidirectional event relationships
+- ✅ Timeline reconstruction and event sequences
+- ✅ Temporal pattern detection
+- ✅ Delete with relationship cleanup
+
+### Conversation Memory
+- ✅ Multi-conversation storage with user linking
+- ✅ Message sequences with ordering and metadata
+- ✅ Context maintenance across turns
+- ✅ Topic tracking (per-message and manual)
+- ✅ Retrieval by user, time range, topic, content
+- ✅ Multi-turn turn pairs and message references
+- ✅ Context window building
+
+### Experience Tracker
+- ✅ Experience logging with outcomes, scores, feedback, tags
+- ✅ Multiple outcome types (Success, Failure, Partial, Unknown)
+- ✅ Retrieval by action, outcome, tag, time range
+- ✅ Success rate and average score calculation
+- ✅ Outcome distribution analysis
+- ✅ Common tag extraction
+- ✅ Score trend tracking
+- ✅ Lesson extraction with recommendations
+- ✅ Multi-action comparison
+- ✅ Improvement detection (sliding window)
+
 ### Memory Storage
 - ✅ Abstract storage interface (pluggable backends)
 - ✅ CRUD operations (save, retrieve, update, delete)
@@ -276,6 +413,12 @@ cd day_47
 python -m pytest test_conversation_manager.py -v
 python -m pytest test_token_counter.py -v
 python -m pytest test_context_manager.py -v
+
+# Run Day 49 tests
+cd ../day_49
+python -m pytest test_event_store.py -v
+python -m pytest test_conversation_memory.py -v
+python -m pytest test_experience_tracker.py -v
 
 # Run Day 48 tests
 cd ../day_48
@@ -349,6 +492,13 @@ ai-agent-project-4 Agent Memory Systems/
 │   ├── test_memory_storage.py       # In-memory storage tests
 │   ├── test_sql_store.py            # SQL storage tests
 │   └── test_persistence_manager.py  # Persistence manager tests
+├── day_49/                          # Episodic Event Store, Conversation Memory & Experience Tracker
+│   ├── event_store.py               # Event storage with temporal ordering
+│   ├── test_event_store.py          # Event store tests
+│   ├── conversation_memory.py       # Multi-conversation memory management
+│   ├── test_conversation_memory.py  # Conversation memory tests
+│   ├── experience_tracker.py        # Experience tracking for learning
+│   └── test_experience_tracker.py   # Experience tracker tests
 ├── venv/                            # Virtual environment
 ├── requirements.txt                 # Python dependencies
 └── README.md                        # This file
@@ -368,9 +518,12 @@ This project is for educational and research purposes.
 
 ## Future Enhancements
 
+- [ ] Event store persistence backend
 - [ ] Vector-based memory retrieval
 - [x] Persistent storage backends (SQLAlchemy + SQLite)
+- [x] Conversation memory with multi-turn context tracking
 - [ ] Memory consolidation strategies
 - [ ] Multi-agent memory sharing
 - [ ] Advanced context compression
+- [x] Experience tracking with pattern recognition
 - [ ] Memory importance scoring
