@@ -1,10 +1,10 @@
 # AI Agent Memory Systems
 
-A comprehensive collection of memory management systems and tools for AI agents, including conversation history management, token counting, budgeting, context window management with prioritization, and abstract memory storage interfaces.
+A comprehensive collection of memory management systems and tools for AI agents, including conversation history management, token counting, budgeting, context window management with prioritization, abstract memory storage interfaces, semantic memory fact storage, knowledge graph organization, and RAG-based knowledge retrieval.
 
 ## Project Overview
 
-This project implements various memory architectures and management systems for AI agents, focusing on practical implementations of conversation management, token budgeting, context prioritization, memory storage abstraction, and memory optimization strategies.
+This project implements various memory architectures and management systems for AI agents, focusing on practical implementations of conversation management, token budgeting, context prioritization, memory storage abstraction, memory optimization strategies, semantic memory with fact storage, knowledge graph organization, and retrieval-augmented generation.
 
 ## Structure
 
@@ -70,6 +70,46 @@ This project implements various memory architectures and management systems for 
   - Lesson extraction with recommendations
   - Action comparison across multiple strategies
   - Improvement detection via sliding window score analysis
+
+### Day 50: Semantic Memory Fact Store & Knowledge Graph
+- **fact_store.py**: Subject-predicate-object triple store for semantic memory
+  - Fact types: Assertion, Definition, Relation, Attribute, Rule
+  - Fact structure with subject, predicate, object, properties, confidence
+  - Indexed storage for fast retrieval by subject, predicate, object, type
+  - Multi-field query interface with AND logic and confidence filtering
+  - Bidirectional relationship management between facts
+  - BFS traversal of related facts with configurable depth
+  - CRUD operations with index and relationship cleanup
+  - Custom error hierarchy (FactStoreError, FactNotFoundError)
+
+- **knowledge_graph.py**: Knowledge graph for organizing facts and concepts
+  - Node types: Entity, Concept, Event, Attribute, Category
+  - Edge types: IS_A, HAS, PART_OF, RELATED_TO, CAUSES, DEPENDS_ON, CUSTOM
+  - Directed edges with weight, label, and properties
+  - Indexed storage for fast node/edge lookup by type, label
+  - Adjacency tracking (outgoing/incoming edges per node)
+  - Neighbor queries with direction and edge type filtering
+  - BFS traversal with configurable depth, direction, and edge type
+  - Shortest path finding (BFS) with edge type and depth constraints
+  - Pattern matching: find (source, edge, target) triples by type
+  - Subgraph extraction by node set
+  - Node removal cascades to connected edges
+  - Custom error hierarchy (KnowledgeGraphError, NodeNotFoundError, EdgeNotFoundError)
+
+- **rag_integration.py**: RAG integration for semantic memory retrieval
+  - Pluggable embedding provider interface (EmbeddingProvider ABC)
+  - Built-in HashEmbedding for zero-dependency development and testing
+  - In-memory vector store with cosine similarity search
+  - Batch embedding and document ingestion
+  - Metadata filtering on vector search
+  - Pre-computed vector search support
+  - RAGRetriever: indexes facts and knowledge graph nodes as vectors
+  - Similarity search with automatic fact/node resolution
+  - Related fact/node expansion via FactStore and KnowledgeGraph links
+  - Formatted context generation for prompt augmentation
+  - Full prompt builder with system prompt, retrieved knowledge, and query
+  - Works standalone (text-only) or integrated with FactStore/KnowledgeGraph
+  - Custom error hierarchy (RAGError, DocumentNotFoundError)
 
 ### Day 48: Memory Storage Interface
 - **memory_storage.py**: Abstract storage interface with in-memory backend
@@ -269,6 +309,117 @@ notes = storage.list_memories(filter_metadata={"type": "note"})
 storage.delete(mem.id)
 ```
 
+### RAG Integration
+
+```python
+from day_50.fact_store import FactStore, FactType
+from day_50.knowledge_graph import KnowledgeGraph, NodeType, EdgeType
+from day_50.rag_integration import HashEmbedding, VectorStore, RAGRetriever
+
+# Set up components
+fact_store = FactStore()
+kg = KnowledgeGraph()
+embedder = HashEmbedding(dimension=128)  # swap for sentence-transformers in prod
+vs = VectorStore(embedder)
+rag = RAGRetriever(vs, fact_store=fact_store, knowledge_graph=kg)
+
+# Populate semantic memory
+f1 = fact_store.store("Python", "is_a", "programming language",
+                      fact_type=FactType.DEFINITION)
+py = kg.add_node("Python", NodeType.ENTITY)
+
+# Index into vector store
+rag.index_fact(f1)
+rag.index_node(py)
+rag.index_text("Python was created by Guido van Rossum")
+
+# Similarity search + retrieval
+result = rag.retrieve("What is Python?", top_k=5, include_related=True)
+print(result.context)          # formatted facts & concepts
+print(result.facts)            # resolved Fact objects
+print(result.nodes)            # resolved Node objects
+
+# Build a RAG-augmented prompt
+prompt = rag.augment_prompt(
+    "What is Python?",
+    system_prompt="You are a helpful assistant.",
+    top_k=5,
+)
+```
+
+### Knowledge Graph
+
+```python
+from day_50.knowledge_graph import KnowledgeGraph, NodeType, EdgeType
+
+graph = KnowledgeGraph()
+
+# Add nodes (entities, concepts)
+python = graph.add_node("Python", NodeType.ENTITY)
+pl = graph.add_node("Programming Language", NodeType.CONCEPT)
+django = graph.add_node("Django", NodeType.ENTITY)
+wf = graph.add_node("Web Framework", NodeType.CONCEPT)
+
+# Add directed edges (relationships)
+graph.add_edge(python.id, pl.id, EdgeType.IS_A)
+graph.add_edge(django.id, wf.id, EdgeType.IS_A)
+graph.add_edge(django.id, python.id, EdgeType.DEPENDS_ON)
+
+# Query nodes and edges
+graph.nodes_by_type(NodeType.ENTITY)              # all entities
+graph.edges_from(python.id)                        # outgoing edges
+graph.find_nodes(node_type=NodeType.CONCEPT)       # query with filters
+graph.find_edges(edge_type=EdgeType.IS_A)          # all IS_A edges
+
+# Neighbors and traversal
+graph.neighbors(python.id, direction="both")       # connected nodes
+graph.bfs(django.id, max_depth=2, direction="out") # BFS by depth
+
+# Path finding
+path = graph.find_path(django.id, pl.id)           # shortest path
+
+# Pattern matching
+graph.match_pattern(source_type=NodeType.ENTITY,
+                    edge_type=EdgeType.IS_A,
+                    target_type=NodeType.CONCEPT)   # matching triples
+
+# Subgraph extraction
+nodes, edges = graph.subgraph({python.id, pl.id, django.id})
+```
+
+### Semantic Fact Store
+
+```python
+from day_50.fact_store import FactStore, FactType
+
+store = FactStore()
+
+# Store facts as subject-predicate-object triples
+f1 = store.store("Python", "is_a", "programming language", fact_type=FactType.DEFINITION)
+f2 = store.store("Python", "created_by", "Guido van Rossum")
+f3 = store.store("Python", "has_feature", "dynamic typing",
+                 fact_type=FactType.ATTRIBUTE, confidence=0.95)
+
+# Retrieve by field
+store.by_subject("Python")                # all Python facts
+store.by_predicate("is_a")                # all "is_a" facts
+store.by_type(FactType.DEFINITION)         # all definitions
+
+# Multi-field query
+store.query(subject="Python", predicate="is_a")           # AND logic
+store.query(fact_type=FactType.ATTRIBUTE, min_confidence=0.9)
+
+# Relationship management
+store.link(f1.id, f2.id)                  # bidirectional link
+store.get_related(f1.id)                  # related facts
+store.traverse(f1.id, max_depth=2)        # BFS traversal
+store.unlink(f1.id, f2.id)               # remove link
+
+# Update and delete
+store.update(f1.id, properties={"version": "3.12"})
+store.delete(f3.id)                       # cleans indexes & relationships
+```
+
 ### SQL Storage (Persistent)
 
 ```python
@@ -402,6 +553,46 @@ print(pm.stats)  # {saves: 2, retrievals: 1, ...}
 - ✅ Operation stats tracking
 - ✅ Structured logging (operations, errors, performance)
 
+### Semantic Fact Store
+- ✅ Subject-predicate-object triple storage
+- ✅ Multiple fact types (Assertion, Definition, Relation, Attribute, Rule)
+- ✅ Indexed retrieval by subject, predicate, object, type
+- ✅ Multi-field query with AND logic
+- ✅ Confidence-based filtering
+- ✅ Bidirectional relationship management
+- ✅ BFS relationship traversal with depth control
+- ✅ CRUD with index and relationship cleanup
+- ✅ Custom error hierarchy
+
+### Knowledge Graph
+- ✅ Typed nodes (Entity, Concept, Event, Attribute, Category)
+- ✅ Typed directed edges (IS_A, HAS, PART_OF, RELATED_TO, CAUSES, DEPENDS_ON, CUSTOM)
+- ✅ Weighted edges with labels and properties
+- ✅ Indexed node/edge lookup by type and label
+- ✅ Directional neighbor queries with edge type filtering
+- ✅ BFS traversal with depth, direction, and edge type control
+- ✅ Shortest path finding with constraints
+- ✅ Pattern matching (source, edge, target triples)
+- ✅ Subgraph extraction
+- ✅ Cascading node removal
+- ✅ Custom error hierarchy
+
+### RAG Integration
+- ✅ Pluggable embedding provider interface
+- ✅ Built-in hash-based embedding (zero external dependencies)
+- ✅ In-memory vector store with cosine similarity
+- ✅ Batch document ingestion
+- ✅ Top-k similarity search with min-score filtering
+- ✅ Metadata filtering on search
+- ✅ Pre-computed vector search
+- ✅ Fact and knowledge graph node indexing
+- ✅ Automatic fact/node resolution from search results
+- ✅ Related fact/node expansion
+- ✅ Formatted context generation
+- ✅ RAG-augmented prompt building
+- ✅ Works standalone or integrated with FactStore/KnowledgeGraph
+- ✅ Custom error hierarchy
+
 ## Running Tests
 
 ```bash
@@ -425,6 +616,12 @@ cd ../day_48
 python -m pytest test_memory_storage.py -v
 python -m pytest test_sql_store.py -v
 python -m pytest test_persistence_manager.py -v
+
+# Run Day 50 tests
+cd ../day_50
+python -m pytest test_fact_store.py -v
+python -m pytest test_knowledge_graph.py -v
+python -m pytest test_rag_integration.py -v
 ```
 
 ## Running Examples
@@ -447,6 +644,9 @@ python examples_context_manager.py
 7. **Overflow Handling**: Gracefully handle context that exceeds model limits
 8. **Multi-Component Systems**: Coordinate system prompts, history, tools, and context
 9. **Pluggable Storage**: Swap storage backends without changing application code
+10. **Semantic Memory**: Store and query knowledge as subject-predicate-object triples
+11. **Knowledge Graphs**: Organize entities and concepts with typed relationships, traversal, and pattern matching
+12. **RAG Retrieval**: Augment prompts with semantically relevant knowledge from facts and graphs
 
 ## Best Practices
 
@@ -465,6 +665,8 @@ python examples_context_manager.py
 - Python 3.8+
 - tiktoken: Token counting for OpenAI models
 - SQLAlchemy: SQL database toolkit
+- chromadb: Vector database for RAG integration
+- openai: OpenAI API client for embeddings
 - pytest: Testing framework
 
 ## Project Structure
@@ -499,6 +701,13 @@ ai-agent-project-4 Agent Memory Systems/
 │   ├── test_conversation_memory.py  # Conversation memory tests
 │   ├── experience_tracker.py        # Experience tracking for learning
 │   └── test_experience_tracker.py   # Experience tracker tests
+├── day_50/                          # Semantic Memory, Knowledge Graph & RAG
+│   ├── fact_store.py                # Subject-predicate-object triple store
+│   ├── test_fact_store.py           # Fact store tests
+│   ├── knowledge_graph.py           # Knowledge graph with typed nodes & edges
+│   ├── test_knowledge_graph.py      # Knowledge graph tests
+│   ├── rag_integration.py           # RAG: embedding, vector store, retrieval
+│   └── test_rag_integration.py      # RAG integration tests
 ├── venv/                            # Virtual environment
 ├── requirements.txt                 # Python dependencies
 └── README.md                        # This file
@@ -519,7 +728,7 @@ This project is for educational and research purposes.
 ## Future Enhancements
 
 - [ ] Event store persistence backend
-- [ ] Vector-based memory retrieval
+- [x] Vector-based memory retrieval (RAG integration)
 - [x] Persistent storage backends (SQLAlchemy + SQLite)
 - [x] Conversation memory with multi-turn context tracking
 - [ ] Memory consolidation strategies
@@ -527,3 +736,5 @@ This project is for educational and research purposes.
 - [ ] Advanced context compression
 - [x] Experience tracking with pattern recognition
 - [ ] Memory importance scoring
+- [x] Semantic memory fact store with relationship traversal
+- [x] Knowledge graph for organizing facts and concepts
