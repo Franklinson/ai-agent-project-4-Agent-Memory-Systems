@@ -1,10 +1,10 @@
 # AI Agent Memory Systems
 
-A comprehensive collection of memory management systems and tools for AI agents, including conversation history management, token counting, budgeting, context window management with prioritization, abstract memory storage interfaces, semantic memory fact storage, knowledge graph organization, and RAG-based knowledge retrieval.
+A comprehensive collection of memory management systems and tools for AI agents, including conversation history management, token counting, budgeting, context window management with prioritization, abstract memory storage interfaces, semantic memory fact storage, knowledge graph organization, RAG-based knowledge retrieval, hybrid episodic-semantic memory integration, intelligent memory type routing, and cross-type query support with combined, sequential, and parallel query patterns.
 
 ## Project Overview
 
-This project implements various memory architectures and management systems for AI agents, focusing on practical implementations of conversation management, token budgeting, context prioritization, memory storage abstraction, memory optimization strategies, semantic memory with fact storage, knowledge graph organization, and retrieval-augmented generation.
+This project implements various memory architectures and management systems for AI agents, focusing on practical implementations of conversation management, token budgeting, context prioritization, memory storage abstraction, memory optimization strategies, semantic memory with fact storage, knowledge graph organization, retrieval-augmented generation, hybrid memory combining episodic and semantic subsystems, intelligent memory type routing with adaptive learning, and cross-type query execution with result merging and relevance ranking.
 
 ## Structure
 
@@ -110,6 +110,56 @@ This project implements various memory architectures and management systems for 
   - Full prompt builder with system prompt, retrieved knowledge, and query
   - Works standalone (text-only) or integrated with FactStore/KnowledgeGraph
   - Custom error hierarchy (RAGError, DocumentNotFoundError)
+
+### Day 51: Hybrid Memory System & Memory Router
+- **hybrid_memory.py**: Unified interface combining episodic and semantic memory
+  - Integrates EventStore, ExperienceTracker (episodic) with FactStore, KnowledgeGraph (semantic)
+  - Unified store/get/delete across all subsystems
+  - Type detection: auto-detect whether an ID is episodic or semantic
+  - Source detection: identify which subsystem owns an item
+  - Query routing with memory type scoping (episodic, semantic, or both)
+  - Rich query filters: event type, participant, action, outcome, tag, subject, predicate, fact type, confidence, node type, node label, time range
+  - Result merging with timestamp-based sorting and limit
+  - QueryResult helpers: filter by source or memory type
+  - Cross-memory linking between episodic and semantic items
+  - Linked item retrieval (bidirectional)
+  - Cross-link cleanup on delete
+  - Subsystem stats aggregation
+  - get_all with type filtering and limit
+  - MemoryItem wrapper with unified fields (id, type, source, content, timestamp, metadata, relevance)
+  - Custom error hierarchy (HybridMemoryError, MemoryNotFoundError)
+
+- **memory_router.py**: Intelligent memory type routing with query analysis
+  - Query analysis: keyword-based intent detection (temporal, factual, experiential, relational, ambiguous)
+  - Signal scoring: normalized scores across intent categories
+  - Structured filter extraction: auto-detects event types, outcomes, fact types, node types from query text
+  - Pluggable routing strategies via RoutingStrategy ABC
+  - KeywordRoutingStrategy: routes based on dominant keyword-intent signal
+  - WeightedRoutingStrategy: configurable confidence threshold with BOTH fallback
+  - AdaptiveRoutingStrategy: learns from query outcomes to improve routing over time
+  - Adaptive learning: tracks (intent → memory_type) result counts, adjusts weights via reward signals
+  - Exploration vs exploitation: configurable exploration rate for uncertain intents
+  - MemoryRouter orchestrator: wraps HybridMemory with automatic analysis → strategy → execution pipeline
+  - Override support: caller can override any routing decision with explicit kwargs
+  - route_with_analysis: returns result + analysis + decision for inspection
+  - Audit log: full history of routed queries with analysis, decision, and result count
+  - Routing stats: total queries, average results, intent distribution
+  - Custom error hierarchy (RoutingError)
+
+- **cross_type_queries.py**: Cross-type query support with multiple execution patterns
+  - Combined queries: query both episodic and semantic simultaneously, merge and rank
+  - Sequential queries: query one type first, bridge results to inform a second query
+  - Parallel queries: execute multiple sub-queries concurrently via ThreadPoolExecutor
+  - Multi-hop queries: chain multiple sequential hops with bridge functions between each
+  - Result merging with ID-based deduplication
+  - Relevance scoring: text-match boosting + base relevance + source priority tiebreak
+  - Three ranking strategies: relevance, timestamp, source_priority
+  - SubQuery dataclass for structured parallel query definitions
+  - MergedResult with pattern, items, sub_results, execution time, and metadata
+  - Default bridge function: extracts subject/label/action keywords from primary results
+  - Custom bridge function support for domain-specific sequential logic
+  - Formatted result output with source labels and relevance scores
+  - Custom error hierarchy (CrossQueryError)
 
 ### Day 48: Memory Storage Interface
 - **memory_storage.py**: Abstract storage interface with in-memory backend
@@ -420,6 +470,126 @@ store.update(f1.id, properties={"version": "3.12"})
 store.delete(f3.id)                       # cleans indexes & relationships
 ```
 
+### Cross-Type Queries
+
+```python
+from day_51.cross_type_queries import (
+    CrossTypeQueryEngine, SubQuery, RankingStrategy, QueryPattern,
+    merge_items, rank_items, format_results,
+)
+from day_51.hybrid_memory import HybridMemory, MemoryType
+
+hm = HybridMemory()
+# ... populate with events, experiences, facts, nodes ...
+engine = CrossTypeQueryEngine(hm)
+
+# Combined: query both types at once, merge and rank
+result = engine.combined("Python", ranking=RankingStrategy.RELEVANCE, limit=10)
+print(result.count)                # total merged items
+print(format_results(result.items)) # formatted output
+
+# Sequential: episodic first, then use results to query semantic
+result = engine.sequential(
+    "login", primary_type=MemoryType.EPISODIC,
+    # default bridge extracts keywords from primary results
+)
+print(result.metadata["bridge_kwargs"])  # derived secondary query hints
+
+# Sequential with custom bridge
+def my_bridge(items):
+    return {"query_text": "Django", "subject": "Django"}
+result = engine.sequential("Python", bridge_fn=my_bridge)
+
+# Parallel: multiple independent sub-queries concurrently
+result = engine.parallel([
+    SubQuery("Python", MemoryType.SEMANTIC, label="facts"),
+    SubQuery("login", MemoryType.EPISODIC, label="events"),
+    SubQuery("search", MemoryType.EPISODIC, label="experiences"),
+], limit=20)
+
+# Multi-hop: chain queries across memory types
+result = engine.multi_hop("Python", hops=[
+    {"memory_type": MemoryType.SEMANTIC},
+    {"memory_type": MemoryType.EPISODIC, "bridge_fn": my_bridge},
+])
+```
+
+### Memory Router (Intelligent Routing)
+
+```python
+from day_51.memory_router import (
+    MemoryRouter, analyse_query,
+    KeywordRoutingStrategy, WeightedRoutingStrategy, AdaptiveRoutingStrategy,
+)
+from day_51.hybrid_memory import HybridMemory
+
+hm = HybridMemory()
+# ... populate with events, experiences, facts, nodes ...
+
+# Basic routing — auto-analyses query and routes to the right subsystem
+router = MemoryRouter(hm)
+result = router.route("When did the login event happen?")  # → episodic
+result = router.route("What is Python?")                   # → semantic
+result = router.route("How did search perform?")           # → episodic (experiences)
+
+# Inspect analysis without executing
+analysis = router.analyse("What is related to Django?")
+print(analysis.intent)              # QueryIntent.RELATIONAL
+print(analysis.signals)             # {temporal: 0.0, factual: 0.2, ...}
+print(analysis.detected_filters)    # {node_type: NodeType.ENTITY, ...}
+
+# Full inspection: result + analysis + decision
+result, analysis, decision = router.route_with_analysis("What is Python?")
+print(decision.memory_type)         # MemoryType.SEMANTIC
+print(decision.strategy_name)       # "keyword"
+
+# Switch strategies at runtime
+router.strategy = WeightedRoutingStrategy(threshold=0.5)
+router.strategy = AdaptiveRoutingStrategy(learning_rate=0.1)
+
+# Override routing decisions
+result = router.route("anything", memory_type=MemoryType.SEMANTIC)
+
+# Routing stats
+print(router.stats())  # {total_queries: 3, avg_results: 2.0, ...}
+```
+
+### Hybrid Memory (Episodic + Semantic)
+
+```python
+from day_51.hybrid_memory import HybridMemory, MemoryType
+from day_49.event_store import EventType
+from day_49.experience_tracker import Outcome
+from day_50.fact_store import FactType
+from day_50.knowledge_graph import NodeType, EdgeType
+
+hm = HybridMemory()
+
+# Store across subsystems via unified API
+ev = hm.store_event(EventType.ACTION, data={"action": "login"}, participants=["alice"])
+exp = hm.store_experience("search", Outcome.SUCCESS, score=0.9, tags=["web"])
+fact = hm.store_fact("Python", "is_a", "programming language", fact_type=FactType.DEFINITION)
+node = hm.store_node("Python", NodeType.ENTITY)
+
+# Unified get/delete (auto-detects subsystem)
+item = hm.get(ev.id)
+hm.detect_type(fact.id)          # MemoryType.SEMANTIC
+hm.detect_source(ev.id)          # MemorySource.EVENT_STORE
+
+# Query with routing
+result = hm.query("Python")                                    # both types
+result = hm.query("", memory_type=MemoryType.EPISODIC)         # episodic only
+result = hm.query("", subject="Python", memory_type=MemoryType.SEMANTIC)
+result = hm.query("", action="search", outcome=Outcome.SUCCESS)
+
+# Cross-memory linking
+link = hm.cross_link(ev.id, fact.id, relationship="triggered_by")
+linked = hm.get_linked_items(ev.id)  # [fact MemoryItem]
+
+# Stats
+hm.stats()  # {events: 1, experiences: 1, facts: 1, graph_nodes: 1, ...}
+```
+
 ### SQL Storage (Persistent)
 
 ```python
@@ -577,6 +747,52 @@ print(pm.stats)  # {saves: 2, retrievals: 1, ...}
 - ✅ Cascading node removal
 - ✅ Custom error hierarchy
 
+### Hybrid Memory System
+- ✅ Unified interface over episodic and semantic subsystems
+- ✅ Unified store/get/delete across EventStore, ExperienceTracker, FactStore, KnowledgeGraph
+- ✅ Automatic type detection (episodic vs semantic)
+- ✅ Automatic source detection (which subsystem owns an ID)
+- ✅ Query routing by memory type (episodic, semantic, or both)
+- ✅ Rich query filters (event type, participant, action, outcome, tag, subject, predicate, fact type, confidence, node type, node label, time range)
+- ✅ Result merging with timestamp sorting and limit
+- ✅ Cross-memory linking between episodic and semantic items
+- ✅ Bidirectional linked item retrieval
+- ✅ Cross-link cleanup on delete
+- ✅ Subsystem stats aggregation
+- ✅ MemoryItem unified wrapper
+- ✅ Custom error hierarchy
+
+### Cross-Type Queries
+- ✅ Combined queries: simultaneous episodic + semantic with merged results
+- ✅ Sequential queries: primary → bridge → secondary with result accumulation
+- ✅ Parallel queries: concurrent sub-query execution via ThreadPoolExecutor
+- ✅ Multi-hop queries: chained sequential hops with bridge functions
+- ✅ Result merging with ID-based deduplication
+- ✅ Three ranking strategies (relevance, timestamp, source_priority)
+- ✅ Text-match relevance scoring with source priority tiebreak
+- ✅ Custom bridge function support for sequential queries
+- ✅ Default bridge: keyword extraction from primary results
+- ✅ SubQuery dataclass for structured parallel definitions
+- ✅ MergedResult with execution time tracking and metadata
+- ✅ Formatted result output
+- ✅ Custom error hierarchy
+
+### Memory Router
+- ✅ Query analysis with intent detection (temporal, factual, experiential, relational, ambiguous)
+- ✅ Normalized signal scoring across intent categories
+- ✅ Structured filter extraction from query text (event types, outcomes, fact types, node types)
+- ✅ Pluggable routing strategies via abstract base class
+- ✅ KeywordRoutingStrategy: dominant-signal routing
+- ✅ WeightedRoutingStrategy: confidence-threshold routing with BOTH fallback
+- ✅ AdaptiveRoutingStrategy: learns from query outcomes with configurable learning/exploration rates
+- ✅ MemoryRouter orchestrator with automatic analysis → strategy → execution pipeline
+- ✅ Override support for explicit routing control
+- ✅ Full inspection mode (route_with_analysis)
+- ✅ Audit log with query history
+- ✅ Routing statistics (total queries, average results, intent distribution)
+- ✅ Runtime strategy switching
+- ✅ Custom error hierarchy
+
 ### RAG Integration
 - ✅ Pluggable embedding provider interface
 - ✅ Built-in hash-based embedding (zero external dependencies)
@@ -622,6 +838,12 @@ cd ../day_50
 python -m pytest test_fact_store.py -v
 python -m pytest test_knowledge_graph.py -v
 python -m pytest test_rag_integration.py -v
+
+# Run Day 51 tests
+cd ../day_51
+python -m pytest test_hybrid_memory.py -v
+python -m pytest test_memory_router.py -v
+python -m pytest test_cross_type_queries.py -v
 ```
 
 ## Running Examples
@@ -647,6 +869,9 @@ python examples_context_manager.py
 10. **Semantic Memory**: Store and query knowledge as subject-predicate-object triples
 11. **Knowledge Graphs**: Organize entities and concepts with typed relationships, traversal, and pattern matching
 12. **RAG Retrieval**: Augment prompts with semantically relevant knowledge from facts and graphs
+13. **Hybrid Memory**: Unified querying across episodic events/experiences and semantic facts/graphs with cross-linking
+14. **Intelligent Routing**: Automatic query analysis and routing to the right memory subsystem with adaptive learning
+15. **Cross-Type Queries**: Combined, sequential, parallel, and multi-hop queries across episodic and semantic memory with relevance ranking
 
 ## Best Practices
 
@@ -708,6 +933,13 @@ ai-agent-project-4 Agent Memory Systems/
 │   ├── test_knowledge_graph.py      # Knowledge graph tests
 │   ├── rag_integration.py           # RAG: embedding, vector store, retrieval
 │   └── test_rag_integration.py      # RAG integration tests
+├── day_51/                          # Hybrid Memory, Router & Cross-Type Queries
+│   ├── hybrid_memory.py             # Unified episodic + semantic memory
+│   ├── test_hybrid_memory.py        # Hybrid memory tests
+│   ├── memory_router.py             # Intelligent memory type routing
+│   ├── test_memory_router.py        # Memory router tests
+│   ├── cross_type_queries.py        # Cross-type query patterns & merging
+│   └── test_cross_type_queries.py   # Cross-type query tests
 ├── venv/                            # Virtual environment
 ├── requirements.txt                 # Python dependencies
 └── README.md                        # This file
@@ -738,3 +970,6 @@ This project is for educational and research purposes.
 - [ ] Memory importance scoring
 - [x] Semantic memory fact store with relationship traversal
 - [x] Knowledge graph for organizing facts and concepts
+- [x] Hybrid memory combining episodic and semantic subsystems
+- [x] Intelligent memory type routing with adaptive learning
+- [x] Cross-type query support with combined, sequential, and parallel patterns
