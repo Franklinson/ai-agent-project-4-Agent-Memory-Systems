@@ -1,10 +1,10 @@
 # AI Agent Memory Systems
 
-A comprehensive collection of memory management systems and tools for AI agents, including conversation history management, token counting, budgeting, context window management with prioritization, abstract memory storage interfaces, semantic memory fact storage, knowledge graph organization, RAG-based knowledge retrieval, hybrid episodic-semantic memory integration, intelligent memory type routing, and cross-type query support with combined, sequential, and parallel query patterns.
+A comprehensive collection of memory management systems and tools for AI agents, including conversation history management, token counting, budgeting, context window management with prioritization, abstract memory storage interfaces, semantic memory fact storage, knowledge graph organization, RAG-based knowledge retrieval, hybrid episodic-semantic memory integration, intelligent memory type routing, cross-type query support with combined, sequential, and parallel query patterns, and intelligent memory type selection with multiple algorithms and optimization.
 
 ## Project Overview
 
-This project implements various memory architectures and management systems for AI agents, focusing on practical implementations of conversation management, token budgeting, context prioritization, memory storage abstraction, memory optimization strategies, semantic memory with fact storage, knowledge graph organization, retrieval-augmented generation, hybrid memory combining episodic and semantic subsystems, intelligent memory type routing with adaptive learning, and cross-type query execution with result merging and relevance ranking.
+This project implements various memory architectures and management systems for AI agents, focusing on practical implementations of conversation management, token budgeting, context prioritization, memory storage abstraction, memory optimization strategies, semantic memory with fact storage, knowledge graph organization, retrieval-augmented generation, hybrid memory combining episodic and semantic subsystems, intelligent memory type routing with adaptive learning, cross-type query execution with result merging and relevance ranking, and intelligent memory type selection with rule-based, query-based, pattern-based, and hybrid algorithms.
 
 ## Structure
 
@@ -111,6 +111,42 @@ This project implements various memory architectures and management systems for 
   - Works standalone (text-only) or integrated with FactStore/KnowledgeGraph
   - Custom error hierarchy (RAGError, DocumentNotFoundError)
 
+### Day 52: Unified Memory System
+- **unified_memory.py**: Unified interface integrating all memory types
+  - Single API over working, short-term, long-term, and hybrid memory
+  - Automatic type detection and intelligent routing
+  - Seamless access across conversation, context, tokens, events, experiences, facts, and knowledge graph
+  - Cross-memory linking and related item retrieval
+  - Context building with automatic memory retrieval
+  - Memory optimization and export capabilities
+  - Layer-aware querying (working, short-term, long-term, hybrid)
+  - Cross-type query patterns (combined, sequential, parallel)
+  - Unified store/get/delete interface with type abstraction
+  - Error handling with graceful degradation
+  - Comprehensive memory statistics and management
+
+- **memory_coordinator.py**: Coordination mechanisms for memory types
+  - Query routing with keyword-based and adaptive strategies
+  - Result merging with relevance-based ranking and deduplication
+  - State synchronization across memory layers with conflict detection
+  - Event coordination with threading-safe event queue
+  - Multiple coordination patterns (sequential, parallel, hierarchical, adaptive)
+  - Cross-layer storage coordination
+  - Performance monitoring and statistics
+  - Error handling and recovery mechanisms
+
+- **type_selector.py**: Intelligent memory type selection with multiple algorithms
+  - Query analysis: extracts temporal, factual, experiential, relational, conversational signals
+  - Information need detection (recall, lookup, exploration, temporal, experiential)
+  - Question detection and temporal reference identification
+  - RuleBasedSelector: deterministic keyword/signal threshold rules
+  - QueryBasedSelector: scores each (layer, type) pair and picks the best
+  - PatternBasedSelector: learns from past query→result patterns
+  - HybridSelector: combines multiple selectors via weighted voting
+  - AutoSelector: automatic selection with fallback and caching
+  - SelectionOptimizer: tracks outcomes and tunes selector performance
+  - Custom error hierarchy (TypeSelectorError, SelectionFailedError)
+
 ### Day 51: Hybrid Memory System & Memory Router
 - **hybrid_memory.py**: Unified interface combining episodic and semantic memory
   - Integrates EventStore, ExperienceTracker (episodic) with FactStore, KnowledgeGraph (semantic)
@@ -202,6 +238,114 @@ pip install -r requirements.txt
 ```
 
 ## Quick Start
+
+### Unified Memory System
+
+```python
+from day_52.unified_memory import UnifiedMemory, MemoryLayer
+from day_47.context_manager import Priority
+from day_49.event_store import EventType
+from day_49.experience_tracker import Outcome
+from day_50.fact_store import FactType
+from day_50.knowledge_graph import NodeType
+from day_51.cross_type_queries import QueryPattern
+
+# Initialize unified memory system
+memory = UnifiedMemory(
+    total_budget=4000,
+    response_reserve=500,
+    max_messages=10
+)
+
+# Store different types of content with automatic type detection
+memory.store("Hello!", role="user")  # → working memory (conversation)
+memory.store(
+    "User logged in",
+    memory_type="event",
+    event_type=EventType.ACTION
+)  # → short-term memory (events)
+memory.store(
+    "Task completed successfully",
+    memory_type="experience",
+    action="task",
+    outcome=Outcome.SUCCESS
+)  # → short-term memory (experiences)
+memory.store(
+    "programming language",
+    memory_type="fact",
+    subject="Python",
+    predicate="is_a"
+)  # → long-term memory (facts)
+memory.store(
+    "Django",
+    memory_type="node",
+    node_type=NodeType.ENTITY
+)  # → long-term memory (knowledge graph)
+
+# Query different memory layers
+working_result = memory.query("hello", layer=MemoryLayer.WORKING)
+short_result = memory.query("login", layer=MemoryLayer.SHORT_TERM)
+long_result = memory.query("Python", layer=MemoryLayer.LONG_TERM)
+
+# Intelligent routing (automatic layer selection)
+routed_result = memory.query("What is Python?")  # → routes to semantic memory
+temporal_result = memory.query("When did login happen?")  # → routes to episodic memory
+
+# Cross-type query patterns
+combined_result = memory.query("Python", pattern=QueryPattern.COMBINED)
+sequential_result = memory.query("coding", pattern=QueryPattern.SEQUENTIAL)
+
+# Context building with memory retrieval
+memory.add_to_context("system", "You are helpful", Priority.CRITICAL)
+context = memory.build_context(include_memory=True, query="Python help")
+messages = memory.build_messages()
+
+# Cross-memory linking
+event_item = memory.store("Used Python", memory_type="event", event_type=EventType.ACTION)
+fact_item = memory.store("programming language", memory_type="fact", subject="Python", predicate="is_a")
+memory.link_memories(event_item.id, fact_item.id, "relates_to")
+related = memory.get_related_memories(event_item.id)
+
+# Memory management
+stats = memory.get_memory_stats()
+optimization = memory.optimize_memory()
+export_data = memory.export_memory()
+memory.clear_working_memory()
+```
+
+### Intelligent Type Selection
+
+```python
+from day_52.type_selector import (
+    analyse_query_characteristics, AutoSelector, SelectionOptimizer,
+    RuleBasedSelector, QueryBasedSelector, PatternBasedSelector, HybridSelector,
+)
+
+# Analyse query characteristics
+chars = analyse_query_characteristics("When did the login event happen?")
+print(chars.temporal_score)       # high temporal signal
+print(chars.information_need)     # InformationNeed.TEMPORAL
+print(chars.is_question)          # True
+
+# Automatic selection with fallback
+auto = AutoSelector()
+sel = auto.select("What is the definition of Python?")
+print(sel.layer)          # MemoryLayer.LONG_TERM
+print(sel.memory_type)    # MemoryType.SEMANTIC
+print(sel.confidence)     # 0.0–1.0
+print(sel.algorithm)      # "hybrid"
+
+# Use a specific algorithm
+rule_sel = AutoSelector(algorithm=RuleBasedSelector()).select("recent events")
+query_sel = AutoSelector(algorithm=QueryBasedSelector()).select("recent events")
+
+# Optimization with outcome tracking
+optimizer = SelectionOptimizer()
+sel = optimizer.select("What is Python?")
+optimizer.record_outcome("What is Python?", sel, result_count=5)
+print(optimizer.stats())          # {total_selections: 1, avg_results: 5.0, ...}
+print(optimizer.best_algorithm()) # best-performing algorithm name
+```
 
 ### Conversation Management
 
@@ -643,6 +787,42 @@ print(pm.stats)  # {saves: 2, retrievals: 1, ...}
 
 ## Features
 
+### Unified Memory System
+- ✅ Single API over all memory types (working, short-term, long-term, hybrid)
+- ✅ Automatic type detection and intelligent routing
+- ✅ Seamless access across conversation, context, tokens, events, experiences, facts, and knowledge graph
+- ✅ Cross-memory linking and related item retrieval
+- ✅ Context building with automatic memory retrieval
+- ✅ Memory optimization and export capabilities
+- ✅ Layer-aware querying (working, short-term, long-term, hybrid)
+- ✅ Cross-type query patterns (combined, sequential, parallel)
+- ✅ Unified store/get/delete interface with type abstraction
+- ✅ Error handling with graceful degradation
+- ✅ Comprehensive memory statistics and management
+
+### Memory Coordination
+- ✅ Query routing with keyword-based and adaptive strategies
+- ✅ Result merging with relevance-based ranking and deduplication
+- ✅ State synchronization across memory layers with conflict detection
+- ✅ Event coordination with threading-safe event queue
+- ✅ Multiple coordination patterns (sequential, parallel, hierarchical, adaptive)
+- ✅ Cross-layer storage coordination
+- ✅ Performance monitoring and statistics
+- ✅ Error handling and recovery mechanisms
+
+### Intelligent Type Selection
+- ✅ Query characteristic analysis (temporal, factual, experiential, relational, conversational signals)
+- ✅ Information need detection (recall, lookup, exploration, temporal, experiential)
+- ✅ Question detection and temporal reference identification
+- ✅ RuleBasedSelector: deterministic threshold-based rules
+- ✅ QueryBasedSelector: scored (layer, type) pair selection with alternatives
+- ✅ PatternBasedSelector: learns from past query→result patterns with heuristic fallback
+- ✅ HybridSelector: weighted voting across multiple selectors
+- ✅ AutoSelector: automatic selection with caching and configurable fallback
+- ✅ SelectionOptimizer: outcome tracking, per-algorithm performance stats, best algorithm detection
+- ✅ Pluggable algorithm interface (SelectionAlgorithm ABC)
+- ✅ Custom error hierarchy
+
 ### Conversation Management
 - ✅ Message storage with metadata
 - ✅ Multiple truncation strategies
@@ -844,6 +1024,12 @@ cd ../day_51
 python -m pytest test_hybrid_memory.py -v
 python -m pytest test_memory_router.py -v
 python -m pytest test_cross_type_queries.py -v
+
+# Run Day 52 tests
+cd ../day_52
+python -m pytest test_unified_memory.py -v
+python -m pytest test_memory_coordinator.py -v
+python -m pytest test_type_selector.py -v
 ```
 
 ## Running Examples
@@ -933,6 +1119,15 @@ ai-agent-project-4 Agent Memory Systems/
 │   ├── test_knowledge_graph.py      # Knowledge graph tests
 │   ├── rag_integration.py           # RAG: embedding, vector store, retrieval
 │   └── test_rag_integration.py      # RAG integration tests
+├── day_52/                          # Unified Memory System
+│   ├── unified_memory.py            # Unified interface integrating all memory types
+│   ├── memory_coordinator.py        # Coordination mechanisms for memory types
+│   ├── test_unified_memory.py        # Unified memory tests
+│   ├── test_memory_coordinator.py   # Memory coordinator tests
+│   ├── type_selector.py              # Intelligent memory type selection
+│   ├── test_type_selector.py         # Type selector tests
+│   ├── example_unified_memory.py     # Unified memory usage examples
+│   └── example_memory_coordinator.py # Memory coordinator usage examples
 ├── day_51/                          # Hybrid Memory, Router & Cross-Type Queries
 │   ├── hybrid_memory.py             # Unified episodic + semantic memory
 │   ├── test_hybrid_memory.py        # Hybrid memory tests
@@ -973,3 +1168,5 @@ This project is for educational and research purposes.
 - [x] Hybrid memory combining episodic and semantic subsystems
 - [x] Intelligent memory type routing with adaptive learning
 - [x] Cross-type query support with combined, sequential, and parallel patterns
+- [x] Unified memory system integrating all memory types with single interface
+- [x] Intelligent memory type selection with multiple algorithms and optimization
