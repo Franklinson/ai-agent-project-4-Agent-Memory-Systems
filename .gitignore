@@ -73,3 +73,7 @@ dmypy.json
 
 #others
 .amazonq
+demo_cache
+demo_rag_db
+rag_embeddings_cache
+rag_vector_db

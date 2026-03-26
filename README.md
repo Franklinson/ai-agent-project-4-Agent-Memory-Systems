@@ -111,7 +111,64 @@ This project implements various memory architectures and management systems for 
   - Works standalone (text-only) or integrated with FactStore/KnowledgeGraph
   - Custom error hierarchy (RAGError, DocumentNotFoundError)
 
-### Day 52: Unified Memory System
+### Day 53: Vector Database for Semantic Memory
+- **vector_store.py**: Vector database implementation using ChromaDB
+  - Database connection management (in-memory and persistent)
+  - Collection creation and management with metadata
+  - Document CRUD operations with vector embeddings
+  - Similarity search with metadata filtering
+  - Search by pre-computed vectors
+  - Document counting and collection inspection
+  - Comprehensive error handling
+  - Support for custom embedding providers
+  - Persistent storage across sessions
+  - Batch document operations
+
+- **simple_test.py**: Basic functionality tests
+  - Collection management operations
+  - Document CRUD with pre-computed embeddings
+  - Metadata handling and validation
+  - Error handling verification
+
+- **example_usage.py**: Usage examples and demonstrations
+  - Basic vector store operations
+  - Persistent storage examples
+  - Metadata filtering demonstrations
+  - Best practices and patterns
+
+- **embedding_generator.py**: Embedding generation for semantic memory
+  - Text preprocessing with configurable options (lowercase, special char removal, length limits)
+  - Multiple embedding providers (Sentence Transformers, OpenAI)
+  - Pluggable provider interface for extensibility
+  - Memory and disk-based caching with LRU eviction
+  - Batch processing with configurable batch sizes
+  - Comprehensive error handling and validation
+  - Performance monitoring and statistics
+  - Factory function for easy setup
+  - Support for custom preprocessing pipelines
+
+- **test_embedding_generator.py**: Comprehensive test suite
+  - Text preprocessing tests (normalization, character removal, length validation)
+  - Caching tests (memory, disk, LRU eviction, statistics)
+  - Embedding generation tests (single, batch, error handling)
+  - Provider tests (Sentence Transformers, OpenAI, mocking)
+  - Factory function tests with various configurations
+  - Integration tests with preprocessing and caching
+
+- **example_usage.py**: Usage examples and demonstrations
+  - Sentence Transformers examples with local models
+  - OpenAI API examples with different models
+  - Custom configuration examples (preprocessing, caching)
+  - Semantic memory integration examples
+  - Performance comparison between models
+  - Similarity search demonstrations
+
+- **demo.py**: Simple demonstration script
+  - Basic embedding generation workflow
+  - Caching demonstration
+  - Batch processing examples
+  - Text preprocessing showcase
+  - Performance statistics display
 - **unified_memory.py**: Unified interface integrating all memory types
   - Single API over working, short-term, long-term, and hybrid memory
   - Automatic type detection and intelligent routing
@@ -503,42 +560,133 @@ notes = storage.list_memories(filter_metadata={"type": "note"})
 storage.delete(mem.id)
 ```
 
-### RAG Integration
+### Embedding Generation
 
 ```python
-from day_50.fact_store import FactStore, FactType
-from day_50.knowledge_graph import KnowledgeGraph, NodeType, EdgeType
-from day_50.rag_integration import HashEmbedding, VectorStore, RAGRetriever
+from day_53.embedding_generator import create_embedding_generator
 
-# Set up components
+# Create generator with Sentence Transformers (local)
+generator = create_embedding_generator(
+    provider_type="sentence-transformers",
+    model_name="all-MiniLM-L6-v2",
+    cache_dir="./embeddings_cache",
+    lowercase=True,
+    max_length=512
+)
+
+# Single text embedding
+result = generator.generate("Python is a programming language")
+print(f"Text: {result.text}")
+print(f"Model: {result.model}")
+print(f"Dimension: {result.dimension}")
+print(f"Processing time: {result.processing_time:.4f}s")
+print(f"Cached: {result.cached}")
+print(f"Embedding: {result.embedding[:5]}...")  # First 5 dimensions
+
+# Batch processing
+texts = [
+    "Machine learning algorithms",
+    "Natural language processing",
+    "Computer vision systems"
+]
+
+batch_result = generator.generate_batch(texts, batch_size=2)
+print(f"Processed {len(batch_result.texts)} texts")
+print(f"Total time: {batch_result.total_processing_time:.4f}s")
+print(f"Cache hits: {batch_result.cache_hits}")
+print(f"Cache misses: {batch_result.cache_misses}")
+
+# Cache statistics
+stats = generator.get_cache_stats()
+print(f"Hit rate: {stats['hit_rate']:.2%}")
+print(f"Memory cache size: {stats['memory_cache_size']}")
+
+# OpenAI provider (requires API key)
+openai_generator = create_embedding_generator(
+    provider_type="openai",
+    model_name="text-embedding-3-small",
+    api_key="your-api-key",
+    cache_dir="./openai_cache"
+)
+
+result = openai_generator.generate("AI transforms industries")
+print(f"OpenAI embedding dimension: {result.dimension}")  # 1536
+```
+
+### Custom Embedding Configuration
+
+```python
+from day_53.embedding_generator import (
+    EmbeddingGenerator, TextPreprocessor, EmbeddingCache, SentenceTransformerProvider
+)
+
+# Custom preprocessor
+preprocessor = TextPreprocessor(
+    lowercase=False,  # Keep original case
+    remove_special_chars=True,  # Remove special characters
+    min_length=3,
+    max_length=256
+)
+
+# Custom cache with smaller size
+cache = EmbeddingCache(
+    cache_dir="./custom_cache",
+    max_cache_size=50
+)
+
+# Create provider and generator
+provider = SentenceTransformerProvider("all-mpnet-base-v2")
+generator = EmbeddingGenerator(provider, preprocessor, cache)
+
+# Generate with custom configuration
+result = generator.generate("  Custom TEXT Processing!  ")
+print(f"Processed: '{result.text}'")  # Custom TEXT Processing!
+```
+
+### Semantic Memory Integration
+
+```python
+from day_53.embedding_generator import create_embedding_generator
+from day_50.fact_store import FactStore, FactType
+from day_50.knowledge_graph import KnowledgeGraph, NodeType
+
+# Create embedding generator
+generator = create_embedding_generator(
+    provider_type="sentence-transformers",
+    model_name="all-MiniLM-L6-v2"
+)
+
+# Create semantic memory components
 fact_store = FactStore()
 kg = KnowledgeGraph()
-embedder = HashEmbedding(dimension=128)  # swap for sentence-transformers in prod
-vs = VectorStore(embedder)
-rag = RAGRetriever(vs, fact_store=fact_store, knowledge_graph=kg)
 
-# Populate semantic memory
-f1 = fact_store.store("Python", "is_a", "programming language",
-                      fact_type=FactType.DEFINITION)
-py = kg.add_node("Python", NodeType.ENTITY)
-
-# Index into vector store
-rag.index_fact(f1)
-rag.index_node(py)
-rag.index_text("Python was created by Guido van Rossum")
-
-# Similarity search + retrieval
-result = rag.retrieve("What is Python?", top_k=5, include_related=True)
-print(result.context)          # formatted facts & concepts
-print(result.facts)            # resolved Fact objects
-print(result.nodes)            # resolved Node objects
-
-# Build a RAG-augmented prompt
-prompt = rag.augment_prompt(
-    "What is Python?",
-    system_prompt="You are a helpful assistant.",
-    top_k=5,
+# Store facts and generate embeddings
+fact = fact_store.store(
+    "Python", "is_a", "programming language",
+    fact_type=FactType.DEFINITION
 )
+
+# Generate embedding for the fact
+fact_text = f"{fact.subject} {fact.predicate} {fact.object}"
+embedding_result = generator.generate(fact_text)
+
+print(f"Fact: {fact_text}")
+print(f"Embedding dimension: {embedding_result.dimension}")
+print(f"Processing time: {embedding_result.processing_time:.4f}s")
+
+# Store knowledge graph nodes with embeddings
+node = kg.add_node("Python", NodeType.ENTITY)
+node_embedding = generator.generate(node.label)
+
+# Batch process multiple semantic items
+semantic_texts = [
+    "Python is a programming language",
+    "Machine learning uses algorithms",
+    "Neural networks process data"
+]
+
+batch_result = generator.generate_batch(semantic_texts)
+print(f"Generated {len(batch_result.embeddings)} semantic embeddings")
 ```
 
 ### Knowledge Graph
@@ -972,6 +1120,33 @@ print(pm.stats)  # {saves: 2, retrievals: 1, ...}
 - ✅ Routing statistics (total queries, average results, intent distribution)
 - ✅ Runtime strategy switching
 - ✅ Custom error hierarchy
+
+### Vector Database
+- ✅ ChromaDB integration for vector storage
+- ✅ Collection management with metadata
+- ✅ Document CRUD operations with embeddings
+- ✅ Similarity search with metadata filtering
+- ✅ Search by pre-computed vectors
+- ✅ Persistent storage support
+- ✅ Batch document operations
+- ✅ Custom embedding provider interface
+- ✅ Comprehensive error handling
+- ✅ Document counting and inspection
+
+### Embedding Generation
+- ✅ Text preprocessing with configurable options (lowercase, special char removal, length limits)
+- ✅ Multiple embedding providers (Sentence Transformers, OpenAI)
+- ✅ Pluggable provider interface for extensibility
+- ✅ Memory and disk-based caching with LRU eviction
+- ✅ Batch processing with configurable batch sizes
+- ✅ Comprehensive error handling and validation
+- ✅ Performance monitoring and statistics
+- ✅ Factory function for easy setup
+- ✅ Support for custom preprocessing pipelines
+- ✅ Cache hit/miss tracking and statistics
+- ✅ Automatic model loading and dimension detection
+- ✅ Support for both numpy arrays and regular lists
+- ✅ Graceful handling of missing dependencies
 
 ### RAG Integration
 - ✅ Pluggable embedding provider interface
