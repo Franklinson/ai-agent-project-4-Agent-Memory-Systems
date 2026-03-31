@@ -254,6 +254,114 @@ This project implements various memory architectures and management systems for 
   - Formatted result output with source labels and relevance scores
   - Custom error hierarchy (CrossQueryError)
 
+### Day 54: User Profile System
+- **user_profile.py**: User profile system with data structures
+  - Profile data structure with user identifier, basic information, preferences, settings, metadata
+  - Multiple profile types (Basic, Premium, Admin, Guest) with type-specific validation
+  - Preference management with validation (language, timezone, theme, notifications, privacy)
+  - Profile updates with version control and validation
+  - Schema validation, data validation, type checking, constraint checking
+  - ProfileManager for CRUD operations (create, get, update, delete, search)
+  - JSON serialization/deserialization with datetime handling
+  - Profile statistics and export/import functionality
+  - Custom error hierarchy (ValidationError, ProfileNotFoundError)
+  - Pluggable validator system (BasicProfileValidator, PremiumProfileValidator)
+
+- **test_user_profile.py**: Comprehensive test suite
+  - User preferences tests (defaults, validation)
+  - Profile creation and validation tests
+  - Premium profile validation tests
+  - Preference and profile update tests
+  - Login recording tests
+  - Serialization/deserialization tests
+  - Profile manager CRUD tests
+  - Search and statistics tests
+  - Export/import tests
+  - Validator tests
+
+- **example_usage.py**: Usage examples and demonstrations
+  - Basic profile creation and management
+  - Premium profile with enhanced validation
+  - Validation error handling examples
+  - Profile manager functionality
+  - Serialization examples
+  - Multiple profile types demonstration
+  - Advanced features with custom data
+
+- **demo.py**: Simple demonstration script
+  - Quick profile system overview
+  - Profile creation and management
+  - Preference updates and activity recording
+  - Statistics and serialization demo
+
+- **profile_storage.py**: Secure profile storage with privacy and security
+  - Profile storage with encryption using Fernet (AES 128)
+  - Access control with token-based authentication and authorization
+  - Role-based permissions (Read, Write, Delete, Admin)
+  - Audit logging with SQLite database
+  - Master key management for encryption
+  - Resource-level access control (users can only access own profiles)
+  - Token expiration and cleanup
+  - IP address tracking in audit logs
+  - Comprehensive error handling with custom exceptions
+  - CRUD operations with security validation
+
+- **test_profile_storage.py**: Comprehensive security tests
+  - Encryption manager tests (encryption, decryption, key management)
+  - Access controller tests (authentication, authorization, permissions)
+  - Audit logger tests (logging, activity retrieval)
+  - Secure storage integration tests
+  - Access control enforcement tests
+  - Audit logging integration tests
+  - Security scenario tests
+
+- **example_secure_storage.py**: Security usage examples
+  - Basic secure storage operations
+  - Access control demonstrations
+  - Audit logging examples
+  - Encryption demonstrations
+  - Security scenarios and edge cases
+  - Performance monitoring examples
+
+- **demo_secure_storage.py**: Simple security demonstration
+  - Authentication and authorization demo
+  - Encrypted storage showcase
+  - Access control enforcement
+  - Audit logging demonstration
+  - Admin operations example
+
+- **profile_retrieval.py**: Efficient profile retrieval with caching
+  - Multi-level caching system (LRU, TTL caches)
+  - Connection pooling for optimized database access
+  - Multiple retrieval patterns (direct, batch, filtered, preference, metadata)
+  - Query optimization with database indexes
+  - Performance monitoring and metrics collection
+  - Cache invalidation and management
+  - Thread-safe operations with concurrent access support
+  - Database optimization tools (ANALYZE, VACUUM)
+
+- **test_profile_retrieval.py**: Comprehensive retrieval tests
+  - Cache implementation tests (LRU, TTL)
+  - Connection pool tests
+  - Profile retrieval pattern tests
+  - Performance monitoring tests
+  - Concurrent access tests
+  - Query optimization tests
+  - Cache strategy tests
+
+- **example_profile_retrieval.py**: Retrieval usage examples
+  - Basic retrieval operations
+  - Advanced search and filtering
+  - Caching performance demonstrations
+  - Performance monitoring examples
+  - Query optimization examples
+
+- **demo_profile_retrieval.py**: Simple retrieval demonstration
+  - Quick retrieval system overview
+  - Caching performance comparison
+  - Search operations showcase
+  - Performance metrics display
+
 ### Day 48: Memory Storage Interface
 - **memory_storage.py**: Abstract storage interface with in-memory backend
   - Abstract base class (MemoryStorageInterface) for pluggable backends
@@ -535,6 +643,214 @@ mem.by_time_range(start, end)             # by time window
 mem.get_turn_pairs(conv.id)               # user/assistant pairs
 mem.get_referenced_messages(conv.id, m.id) # follow references
 mem.build_context_window(conv.id, last_n=5) # formatted context
+```
+
+### Efficient Profile Retrieval
+
+```python
+from day_54.profile_retrieval import ProfileRetrieval, QueryType
+from day_54.user_profile import UserProfile, ProfileType
+
+# Initialize retrieval system with caching
+retrieval = ProfileRetrieval("profiles.db", {
+    "profile_cache_size": 100,
+    "preference_cache_size": 50,
+    "query_cache_size": 20,
+    "preference_ttl": 1800  # 30 minutes
+})
+
+# Store profiles
+profile = UserProfile(
+    user_id="alice",
+    username="alice",
+    email="alice@example.com",
+    age=28,
+    profile_type=ProfileType.PREMIUM,
+    full_name="Alice Johnson"
+)
+retrieval.store_profile(profile)
+
+# Direct profile lookup with caching
+profile = retrieval.get_profile("alice", use_cache=True)
+print(f"Retrieved: {profile.username}")
+
+# Batch retrieval (optimized)
+user_ids = ["alice", "bob", "charlie"]
+batch_profiles = retrieval.get_profiles_batch(user_ids, use_cache=True)
+print(f"Retrieved {len(batch_profiles)} profiles")
+
+# Advanced search with caching
+results = retrieval.search_profiles({
+    "profile_type": "premium",
+    "age_min": 25,
+    "language": "en",
+    "theme": "dark"
+}, use_cache=True)
+print(f"Found {len(results)} matching profiles")
+
+# Preference lookup (cached)
+prefs = retrieval.get_preferences("alice", use_cache=True)
+print(f"Theme: {prefs['theme']}, Language: {prefs['language']}")
+
+# Lightweight metadata query
+metadata = retrieval.get_profile_metadata("alice")
+print(f"Version: {metadata['version']}, Type: {metadata['profile_type']}")
+
+# Performance metrics
+metrics = retrieval.get_performance_metrics()
+summary = metrics.get_summary()
+
+print(f"Cache hit rates: {summary['cache_hit_rates']}")
+print(f"Query avg times: {summary['query_avg_times']}")
+print(f"Total queries: {summary['total_queries']}")
+
+# Cache statistics
+for cache_name, stats in metrics.cache_stats.items():
+    print(f"{cache_name}: {stats.hit_rate:.1%} hit rate, {stats.size} items")
+
+# Database optimization
+retrieval.optimize_database()
+
+# Cleanup
+retrieval.close()
+```
+
+### Secure Profile Storage
+
+```python
+from day_54.profile_storage import SecureProfileStorage, AccessLevel, AuditAction
+from day_54.user_profile import UserProfile, ProfileType
+
+# Create secure storage with encryption
+storage = SecureProfileStorage(
+    db_path="secure_profiles.db",
+    master_key="my_secure_master_key_123"
+)
+
+# Authenticate users
+alice_token = storage.authenticate("alice", "password", ip_address="192.168.1.100")
+admin_token = storage.authenticate("admin_user", "password", ip_address="192.168.1.101")
+
+# Create and store encrypted profile
+profile = UserProfile(
+    user_id="alice",
+    username="alice",
+    email="alice@example.com",
+    bio="Sensitive personal information",
+    custom_data={"secret": "confidential data"}
+)
+
+# Store profile (automatically encrypted)
+storage.store_profile(alice_token, profile, ip_address="192.168.1.100")
+
+# Retrieve profile (automatically decrypted)
+retrieved = storage.retrieve_profile(alice_token, "alice", ip_address="192.168.1.100")
+print(f"Retrieved: {retrieved.username}")
+
+# Access control - Alice cannot access other profiles
+try:
+    storage.retrieve_profile(alice_token, "bob")  # Fails
+except AuthorizationError:
+    print("Access denied - users can only access own profiles")
+
+# Admin can access any profile
+admin_retrieved = storage.retrieve_profile(admin_token, "alice")
+print(f"Admin accessed: {admin_retrieved.username}")
+
+# Update profile
+profile.update_profile(bio="Updated sensitive information")
+storage.update_profile(alice_token, profile, ip_address="192.168.1.100")
+
+# Admin operations
+all_profiles = storage.list_profiles(admin_token)  # Admin only
+print(f"Total profiles: {len(all_profiles)}")
+
+# Audit logging
+audit_entries = storage.get_audit_log(alice_token)
+print(f"Alice's activity: {len(audit_entries)} entries")
+
+for entry in audit_entries[:3]:
+    print(f"  {entry.action.value} at {entry.timestamp} from {entry.ip_address}")
+
+# Security features
+master_key = storage.get_master_key()  # For backup
+print(f"Master key: {master_key[:20]}...")
+
+# Logout and cleanup
+storage.logout(alice_token, ip_address="192.168.1.100")
+storage.cleanup_expired_tokens()
+```
+
+### User Profile System
+
+```python
+from day_54.user_profile import UserProfile, ProfileManager, ProfileType, ValidationError
+
+# Create profile manager
+manager = ProfileManager()
+
+# Create different profile types
+basic_profile = manager.create_profile(
+    username="alice",
+    email="alice@example.com",
+    age=25
+)
+
+premium_profile = manager.create_profile(
+    ProfileType.PREMIUM,
+    username="bob",
+    email="bob@example.com",
+    full_name="Bob Smith",
+    age=30,
+    custom_data={"subscription_tier": "premium"}
+)
+
+# Update preferences
+manager.update_preferences(
+    basic_profile.user_id,
+    theme="dark",
+    language="es",
+    notifications=False
+)
+
+# Update profile
+manager.update_profile(
+    premium_profile.user_id,
+    bio="Senior developer",
+    tags=["developer", "premium"]
+)
+
+# Record activity
+basic_profile.record_login()
+premium_profile.record_login()
+
+# Search profiles
+young_users = manager.search_profiles(age=25)
+premium_users = manager.list_profiles(ProfileType.PREMIUM)
+
+# Get statistics
+stats = manager.get_stats()
+print(f"Total profiles: {stats['total_profiles']}")
+print(f"Active users: {stats['active_users']}")
+print(f"By type: {stats['by_type']}")
+
+# Serialization
+json_data = basic_profile.to_json()
+restored_profile = UserProfile.from_json(json_data)
+
+# Validation handling
+try:
+    invalid_profile = UserProfile(
+        username="ab",  # Too short
+        email="invalid"  # Invalid format
+    )
+except ValidationError as e:
+    print(f"Validation error: {e}")
+
+# Export/import profiles
+export_data = manager.export_profiles()
+new_manager = ProfileManager()
+new_manager.import_profiles(export_data)
 ```
 
 ### Memory Storage (In-Memory)
@@ -1024,6 +1340,54 @@ print(pm.stats)  # {saves: 2, retrievals: 1, ...}
 - ✅ Multi-action comparison
 - ✅ Improvement detection (sliding window)
 
+### Efficient Profile Retrieval
+- ✅ Multi-level caching system (LRU and TTL caches)
+- ✅ Connection pooling for optimized database access
+- ✅ Multiple retrieval patterns (direct, batch, filtered, preference, metadata)
+- ✅ Query optimization with database indexes and ANALYZE
+- ✅ Performance monitoring and comprehensive metrics collection
+- ✅ Cache invalidation and intelligent cache management
+- ✅ Thread-safe operations with concurrent access support
+- ✅ Database optimization tools (ANALYZE, VACUUM)
+- ✅ Configurable cache strategies and TTL settings
+- ✅ Batch operations for improved performance
+- ✅ Query result caching with automatic invalidation
+- ✅ Performance decorators for automatic monitoring
+- ✅ Connection pool statistics and monitoring
+- ✅ Cache hit rate optimization and statistics
+
+### Secure Profile Storage
+- ✅ Profile storage with AES-128 encryption using Fernet
+- ✅ Token-based authentication and authorization system
+- ✅ Role-based access control (Read, Write, Delete, Admin permissions)
+- ✅ Resource-level access control (users can only access own profiles)
+- ✅ Comprehensive audit logging with SQLite database
+- ✅ IP address tracking and activity monitoring
+- ✅ Master key management for encryption key backup
+- ✅ Token expiration and automatic cleanup
+- ✅ Secure CRUD operations with validation
+- ✅ Custom security exception hierarchy
+- ✅ Admin-only operations (list all profiles, access any profile)
+- ✅ Authentication failure logging and monitoring
+- ✅ Data encryption at rest (sensitive data not readable in database)
+- ✅ Session management with logout and token revocation
+
+### User Profile System
+- ✅ Profile data structure with user identifier, basic information, preferences, settings, metadata
+- ✅ Multiple profile types (Basic, Premium, Admin, Guest) with type-specific validation
+- ✅ Preference management with validation (language, timezone, theme, notifications, privacy)
+- ✅ Profile updates with version control and validation
+- ✅ Schema validation, data validation, type checking, constraint checking
+- ✅ ProfileManager for CRUD operations (create, get, update, delete, search)
+- ✅ JSON serialization/deserialization with datetime handling
+- ✅ Profile statistics and export/import functionality
+- ✅ Custom error hierarchy (ValidationError, ProfileNotFoundError)
+- ✅ Pluggable validator system with type-specific validation rules
+- ✅ Login tracking and activity recording
+- ✅ Custom data and preference storage
+- ✅ Profile search and filtering capabilities
+- ✅ Version control for profile updates
+
 ### Memory Storage
 - ✅ Abstract storage interface (pluggable backends)
 - ✅ CRUD operations (save, retrieve, update, delete)
@@ -1182,6 +1546,12 @@ python -m pytest test_event_store.py -v
 python -m pytest test_conversation_memory.py -v
 python -m pytest test_experience_tracker.py -v
 
+# Run Day 54 tests
+cd ../day_54
+python -m pytest test_user_profile.py -v
+python -m pytest test_profile_storage.py -v
+python -m pytest test_profile_retrieval.py -v
+
 # Run Day 48 tests
 cd ../day_48
 python -m pytest test_memory_storage.py -v
@@ -1211,7 +1581,15 @@ python -m pytest test_type_selector.py -v
 
 ```bash
 source venv/bin/activate
-cd day_47
+cd day_54
+python demo.py
+python demo_secure_storage.py
+python demo_profile_retrieval.py
+python example_usage.py
+python example_secure_storage.py
+python example_profile_retrieval.py
+
+cd ../day_47
 python examples_token_counter.py
 python examples_context_manager.py
 ```
@@ -1232,7 +1610,10 @@ python examples_context_manager.py
 12. **RAG Retrieval**: Augment prompts with semantically relevant knowledge from facts and graphs
 13. **Hybrid Memory**: Unified querying across episodic events/experiences and semantic facts/graphs with cross-linking
 14. **Intelligent Routing**: Automatic query analysis and routing to the right memory subsystem with adaptive learning
-15. **Cross-Type Queries**: Combined, sequential, parallel, and multi-hop queries across episodic and semantic memory with relevance ranking
+16. **User Profile Management**: Store and manage user profiles with preferences, validation, and multiple profile types
+17. **Secure Profile Storage**: Encrypted profile storage with access control, audit logging, and security features
+18. **Efficient Profile Retrieval**: High-performance profile retrieval with multi-level caching and query optimization
+19. **Profile-Based Personalization**: Customize agent behavior based on user profiles and preferences
 
 ## Best Practices
 
@@ -1253,6 +1634,7 @@ python examples_context_manager.py
 - SQLAlchemy: SQL database toolkit
 - chromadb: Vector database for RAG integration
 - openai: OpenAI API client for embeddings
+- cryptography: Encryption library for secure storage
 - pytest: Testing framework
 
 ## Project Structure
@@ -1273,6 +1655,19 @@ ai-agent-project-4 Agent Memory Systems/
 │   ├── examples_token_counter.py    # Usage examples
 │   ├── examples_context_manager.py  # Usage examples
 │   └── README.md                    # Detailed documentation
+├── day_54/                          # User Profile System
+│   ├── user_profile.py              # User profile data structures & management
+│   ├── profile_storage.py           # Secure profile storage with encryption
+│   ├── profile_retrieval.py         # Efficient profile retrieval with caching
+│   ├── test_user_profile.py         # User profile tests
+│   ├── test_profile_storage.py      # Secure storage tests
+│   ├── test_profile_retrieval.py    # Profile retrieval tests
+│   ├── example_usage.py             # Profile usage examples
+│   ├── example_secure_storage.py    # Security examples
+│   ├── example_profile_retrieval.py # Retrieval examples
+│   ├── demo.py                      # Simple profile demonstration
+│   ├── demo_secure_storage.py       # Simple security demonstration
+│   └── demo_profile_retrieval.py    # Simple retrieval demonstration
 ├── day_48/                          # Memory Storage Interface
 │   ├── memory_storage.py            # Abstract interface + in-memory backend
 │   ├── sql_store.py                 # SQL backend (SQLAlchemy + SQLite)
